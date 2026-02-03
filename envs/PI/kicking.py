@@ -35,6 +35,8 @@ class Kicking(BaseTask):
         self.env_successes = 0
         self.env_falling = 0
         self.ball_velocities = []
+        self.ball_velocities_towards_target = []
+        self._calibrated = False
 
     def _create_envs(self):
         self.num_envs = self.cfg["env"]["num_envs"]
@@ -334,6 +336,11 @@ class Kicking(BaseTask):
                 self.default_dof_pos[:, i] = self.cfg["init_state"]["default_joint_angles"]["default"]
 
         self.last_ball_lin_vel_world = torch.zeros_like(self.body_states[:, -1, 7:10]) # World frame
+        self.ball_speed_max_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+        self.ball_speed_towards_target_max_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+        self.ball_start_pos = torch.zeros(self.num_envs, 3, dtype=torch.float, device=self.device)
+        self.ball_progress_prev = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+        self.ball_progress_delta = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
 
     def _prepare_reward_function(self):
         """Prepares a list of reward functions, whcih will be called to compute the total reward.
@@ -361,6 +368,12 @@ class Kicking(BaseTask):
             self.reward_names.append(name)
             name = "_reward_" + name
             self.reward_functions.append(getattr(self, name))
+
+    def _get_ball_target_position(self):
+        target_position = self.cfg["rewards"].get("ball_target_position", [5.0, 0.0])
+        if len(target_position) == 2:
+            target_position = [target_position[0], target_position[1], self.ball_radius]
+        return to_torch(target_position, device=self.device).unsqueeze(0)
 
     def _init_csv_logging(self):
         """Initialize CSV logging for reward values"""
@@ -460,7 +473,8 @@ class Kicking(BaseTask):
         
         self.env_resets += env_ids.shape[0]
 
-        velocity_before_reset = torch.norm(self.root_states[env_ids, 1, 7:10], dim=1)
+        velocity_before_reset = self.ball_speed_max_buf[env_ids]
+        velocity_towards_target_before_reset = self.ball_speed_towards_target_max_buf[env_ids]
         
         # only get velocities that are greater than 0.1
         velocity_before_reset = velocity_before_reset[velocity_before_reset > 0.1]
@@ -468,6 +482,10 @@ class Kicking(BaseTask):
             # append velocities sepeate
             for velocity in velocity_before_reset:
                 self.ball_velocities.append(velocity.item())
+        velocity_towards_target_before_reset = velocity_towards_target_before_reset[velocity_towards_target_before_reset > 0.1]
+        if len(velocity_towards_target_before_reset) > 0:
+            for velocity in velocity_towards_target_before_reset:
+                self.ball_velocities_towards_target.append(velocity.item())
 
         # Reset robot
         self._reset_dofs(env_ids)
@@ -487,6 +505,34 @@ class Kicking(BaseTask):
         self.delay_steps[env_ids] = torch.randint(0, self.cfg["control"]["decimation"], (len(env_ids),), device=self.device)
         self.extras["time_outs"] = self.time_out_buf
         self.last_ball_lin_vel_world[env_ids] = 0.0 # Reset for selected envs
+        self.ball_speed_max_buf[env_ids] = 0.0
+        self.ball_speed_towards_target_max_buf[env_ids] = 0.0
+        self.ball_progress_prev[env_ids] = 0.0
+        self.ball_progress_delta[env_ids] = 0.0
+        if (not self._calibrated) and (len(env_ids) == self.num_envs):
+            self._maybe_calibrate()
+
+    def _maybe_calibrate(self):
+        """Calibrate base height and feet distance targets from the default pose."""
+        self.gym.refresh_actor_root_state_tensor(self.sim)
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
+        self._refresh_feet_state()
+
+        base_height = self.base_pos[:, 2] - self.terrain.terrain_heights(self.base_pos)
+        _, _, base_yaw = get_euler_xyz(self.base_quat)
+        feet_x_distance = torch.abs(
+            torch.cos(base_yaw) * (self.feet_pos[:, 1, 0] - self.feet_pos[:, 0, 0])
+            - torch.sin(base_yaw) * (self.feet_pos[:, 1, 1] - self.feet_pos[:, 0, 1])
+        )
+        feet_y_distance = torch.abs(
+            torch.sin(base_yaw) * (self.feet_pos[:, 1, 1] - self.feet_pos[:, 0, 1])
+            + torch.cos(base_yaw) * (self.feet_pos[:, 1, 0] - self.feet_pos[:, 0, 0])
+        )
+
+        self.cfg["rewards"]["base_height_target"] = float(base_height.mean().item())
+        self.cfg["rewards"]["feet_distance_ref_x"] = float(feet_x_distance.mean().item())
+        self.cfg["rewards"]["feet_distance_ref_y"] = float(feet_y_distance.mean().item())
+        self._calibrated = True
 
     def _reset_dofs(self, env_ids):
         self.dof_pos[env_ids] = apply_randomization(self.default_dof_pos, self.cfg["randomization"].get("init_dof_pos"))
@@ -544,7 +590,7 @@ class Kicking(BaseTask):
         robot_quat = self.root_states[env_ids_to_reset_ball, 0, 3:7]
 
         # Define forward vector in robot's local frame and repeat for each env
-        forward_vec_local = torch.tensor([1.0, 1.0, 0.0], device=self.device).unsqueeze(0).repeat(len(env_ids_to_reset_ball), 1)
+        forward_vec_local = torch.tensor([1.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(len(env_ids_to_reset_ball), 1)
         
         # Rotate forward vector to world frame
         forward_vec_world = quat_rotate(robot_quat, forward_vec_local)
@@ -575,6 +621,11 @@ class Kicking(BaseTask):
         
         # Set ball linear and angular velocities to zero
         self.root_states[env_ids_to_reset_ball, 1, 7:13] = 0.0
+
+        # Reset ball progress tracking
+        self.ball_start_pos[env_ids_to_reset_ball] = self.root_states[env_ids_to_reset_ball, 1, 0:3]
+        self.ball_progress_prev[env_ids_to_reset_ball] = 0.0
+        self.ball_progress_delta[env_ids_to_reset_ball] = 0.0
 
         # Update only the ball actors in the simulation
         ball_actor_indices = (2 * env_ids_to_reset_ball + 1).to(dtype=torch.int32)
@@ -730,11 +781,23 @@ class Kicking(BaseTask):
         self._refresh_feet_state()
 
         self.episode_length_buf += 1
+        target_position = self._get_ball_target_position()
+        ball_pos_world = self.body_states[:, -1, 0:3]
+        ball_to_target = target_position - ball_pos_world
+        ball_to_target_norm = ball_to_target / (torch.norm(ball_to_target, dim=-1, keepdim=True) + 1e-6)
+        vel_towards_target = torch.sum(self.ball_lin_vel * ball_to_target_norm, dim=-1)
+        success_speed_threshold = self.cfg["rewards"].get("ball_success_speed_threshold", 0.1)
         self.min_ball_vel_buf = torch.where(
-            self.ball_lin_vel[:, 0] > 0.1,
+            vel_towards_target > success_speed_threshold,
             self.min_ball_vel_buf + 1.0,
             torch.zeros_like(self.min_ball_vel_buf)
         )
+        ball_speed = torch.norm(self.ball_lin_vel, dim=-1)
+        self.ball_speed_max_buf = torch.maximum(self.ball_speed_max_buf, ball_speed)
+        self.ball_speed_towards_target_max_buf = torch.maximum(self.ball_speed_towards_target_max_buf, vel_towards_target)
+        ball_progress = torch.sum((ball_pos_world - self.ball_start_pos) * ball_to_target_norm, dim=-1)
+        self.ball_progress_delta = ball_progress - self.ball_progress_prev
+        self.ball_progress_prev = ball_progress
         self.common_step_counter += 1
         self.gait_process[:] = torch.fmod(self.gait_process + self.dt * self.gait_frequency, 1.0)
 
@@ -798,6 +861,8 @@ class Kicking(BaseTask):
         print(f"env_resets: {self.env_resets}, env_successes: {self.env_successes}, env_falling: {self.env_falling}")
         if len(self.ball_velocities) > 0:
             print(f"ball_velocities average: {np.mean(self.ball_velocities)}, std: {np.std(self.ball_velocities)}, max: {np.max(self.ball_velocities)}")
+        if len(self.ball_velocities_towards_target) > 0:
+            print(f"ball_vel_towards_target average: {np.mean(self.ball_velocities_towards_target)}, std: {np.std(self.ball_velocities_towards_target)}, max: {np.max(self.ball_velocities_towards_target)}")
 
         return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
 
@@ -855,26 +920,37 @@ class Kicking(BaseTask):
 
     def _check_termination(self):
         """Check if environments need to be reset"""
-        self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.0, dim=1)
-        self.reset_buf |= self.root_states[:, 0, 7:13].square().sum(dim=-1) > self.cfg["rewards"]["terminate_vel"]
-        self.reset_buf |= self.base_pos[:, 2] - self.terrain.terrain_heights(self.base_pos) < self.cfg["rewards"]["terminate_height"]
+        if len(self.termination_contact_indices) > 0:
+            term_contact = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.0, dim=1)
+        else:
+            term_contact = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        term_vel = self.root_states[:, 0, 7:13].square().sum(dim=-1) > self.cfg["rewards"]["terminate_vel"]
+        term_height = self.base_pos[:, 2] - self.terrain.terrain_heights(self.base_pos) < self.cfg["rewards"]["terminate_height"]
         self.time_out_buf = self.episode_length_buf > np.ceil(self.cfg["rewards"]["episode_length_s"] / self.dt)
-        self.reset_buf |= self.time_out_buf
-        self.reset_buf |= self.min_ball_vel_buf > np.ceil(self.cfg["rewards"]["min_ball_vel_s"] / self.dt)
-        self.time_out_buf |= self.episode_length_buf == self.cmd_resample_time
+        term_timeout = self.time_out_buf | (self.episode_length_buf == self.cmd_resample_time)
+        term_success = self.min_ball_vel_buf > np.ceil(self.cfg["rewards"]["min_ball_vel_s"] / self.dt)
 
-        # Add termination if ball is still for too long
-        max_ball_still_time = self.cfg["rewards"].get("max_ball_still_time_s", 4.0) # Configurable duration
-        self.reset_buf |= self.time_since_ball_is_still_buf > max_ball_still_time
+        max_ball_still_time = self.cfg["rewards"].get("max_ball_still_time_s", 4.0)
+        term_ball_still = self.time_since_ball_is_still_buf > max_ball_still_time
 
-        # Add termination if ball is moving for too long
-        max_ball_moving_time = self.cfg["rewards"].get("max_ball_moving_time_s", 4.0) # Configurable duration
-        self.reset_buf |= self.time_since_ball_is_moving_buf > max_ball_moving_time
+        max_ball_moving_time = self.cfg["rewards"].get("max_ball_moving_time_s", 4.0)
+        term_ball_moving = self.time_since_ball_is_moving_buf > max_ball_moving_time
 
-        # count a success if ball is moving for too long
-        self.env_successes += torch.sum(self.min_ball_vel_buf > np.ceil(self.cfg["rewards"]["min_ball_vel_s"] / self.dt))
-        self.env_falling += torch.sum(self.base_pos[:, 2] - self.terrain.terrain_heights(self.base_pos) < self.cfg["rewards"]["terminate_height"])
-        self.env_falling += torch.sum(self.root_states[:, 0, 7:13].square().sum(dim=-1) > self.cfg["rewards"]["terminate_vel"])
+        self.reset_buf = term_contact | term_vel | term_height | term_timeout | term_success | term_ball_still | term_ball_moving
+
+        self.env_successes += torch.sum(term_success)
+        self.env_falling += torch.sum(term_height)
+        self.env_falling += torch.sum(term_vel)
+
+        self.extras["term_reasons"] = {
+            "term_contact": term_contact.float(),
+            "term_vel": term_vel.float(),
+            "term_height": term_height.float(),
+            "term_timeout": term_timeout.float(),
+            "term_success": term_success.float(),
+            "term_ball_still": term_ball_still.float(),
+            "term_ball_moving": term_ball_moving.float(),
+        }
 
 
 
@@ -1120,10 +1196,7 @@ class Kicking(BaseTask):
         # cfg["rewards"]["ball_velocity_decay_time"] - time constant for exponential decay when ball is moving
         
         # Get the target position from config (2D or 3D)
-        target_position = self.cfg["rewards"].get("ball_target_position", [5.0, 0.0])
-        if len(target_position) == 2:
-            target_position = [target_position[0], target_position[1], self.ball_radius]
-        target_position = to_torch(target_position, device=self.device).unsqueeze(0)
+        target_position = self._get_ball_target_position()
         
         # Get current ball position and velocity (in world frame)
         ball_pos_world = self.body_states[:, -1, 0:3]
@@ -1254,6 +1327,10 @@ class Kicking(BaseTask):
         reward = torch.tanh(torch.clamp(ball_effective_acceleration, min=0.0) / acceleration_scale) * max_acceleration_reward
         
         return reward
+
+    def _reward_ball_progress(self):
+        progress_clip = self.cfg["rewards"].get("ball_progress_clip", 0.05)
+        return torch.clamp(self.ball_progress_delta, min=0.0, max=progress_clip)
 
     def _reward_waiting(self):
         """Reward that increases quadratically with time elapsed in the episode."""

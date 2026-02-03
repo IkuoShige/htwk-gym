@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+.python-version
+
+# IDE
+.vscode/
+.idea/
+
+# Logs and outputs
+logs/
+videos/
+
+# OS
+.DS_Store
+Thumbs.db
+
+third_party/

@@ -1,9 +1,9 @@
 basic:
   checkpoint: null # set to -1 to load last saved model
-  headless: false
+  headless: true
   max_iterations: 20000 # set the maximum number of learning iterations to train for
-  sim_device: "cpu" # device for physics simulation
-  rl_device: "cpu" # device for the RL algorithm
+  sim_device: "cuda:0" # device for physics simulation
+  rl_device: "cuda:0" # device for the RL algorithm
   seed: 42 # seed - set to -1 to choose random seed
   description: ""
   debug_feet_offset: false # enable debug print for feet_x_offset in play mode

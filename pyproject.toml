@@ -1,0 +1,26 @@
+[project]
+name = "htwk-gym"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+  "numpy==1.23",
+  "torch==2.0.0+cu118; sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "tensorboard",
+  "tqdm",
+  "seaborn",
+  "setuptools==59.5.0",
+  "wandb>=0.24.1",
+  "imageio[ffmpeg]>=2.35.1",
+]
+
+[[tool.uv.index]]
+name = "torch-cuda"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "torch-cuda", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'"},
+]

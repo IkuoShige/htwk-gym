@@ -1,9 +1,9 @@
 basic:
   checkpoint: null # set to -1 to load last saved model
-  headless: false
+  headless: true
   max_iterations: 10000 # set the maximum number of learning iterations to train for
-  sim_device: "cpu" # device for physics simulation
-  rl_device: "cpu" # device for the RL algorithm
+  sim_device: "cuda:0" # device for physics simulation
+  rl_device: "cuda:0" # device for the RL algorithm
   seed: -1 # seed - set to -1 to choose random seed
   description: ""
   enable_csv_logging: false
@@ -85,7 +85,8 @@ asset:
 ball:
   file: "resources/T1/ball.urdf"
   name: "ball"
-  init_pos: [0.3, 0.0, 0.06]  # Initial position of the ball
+  radius: 0.075
+  init_pos: [0.3, 0.0, 0.075]  # Initial position of the ball
   init_rot: [0.0, 0.0, 0.0, 1.0]  # Initial rotation (quaternion)
   init_lin_vel: [0.0, 0.0, 0.0]  # Initial linear velocity
   init_ang_vel: [0.0, 0.0, 0.0]  # Initial angular velocity
@@ -101,7 +102,7 @@ init_state:
   rot: [0.0, 0.0, 0.0, 1.0] # x,y,z,w [quat]
   lin_vel: [0.0, 0.0, 0.0]  # x,y,z [m/s]
   ang_vel: [0.0, 0.0, 0.0]  # x,y,z [rad/s]
-  ball_pos: [0.5, 0.0, 0.05]  # x,y,z [m]
+  ball_pos: [0.5, 0.0, 0.075]  # x,y,z [m]
   default_joint_angles: {"Hip_Pitch": -0.2, "Knee_Pitch": 0.4, "Ankle_Pitch": -0.25, "default": 0.} # target angles when action = 0.0
 
 control:
@@ -350,7 +351,7 @@ rewards:
   approach_proximity_sigma: 0.1        # Sigma for proximity reward in kicking_foot_approach_ball_stationary
   max_approach_reward: 50.0             # Max reward for kicking_foot_approach_ball_stationary
 
-  kick_target_pos_world: [5.0, 0.0, 0.05] # Target position for body alignment (world frame, z should be ball radius)
+  kick_target_pos_world: [5.0, 0.0, 0.075] # Target position for body alignment (world frame, z should be ball radius)
   alignment_to_ball_sigma: 0.5         # Sigma for robot-to-ball alignment
   alignment_to_target_sigma: 0.5       # Sigma for robot-to-target alignment
   max_alignment_reward: 1.0            # Max reward for body_alignment_for_kick

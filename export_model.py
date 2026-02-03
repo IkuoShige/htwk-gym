@@ -7,11 +7,13 @@ from utils.model_thomas import *
 
 def get_robot_type(task_name):
     """Determine robot type from task name."""
-    # Check if task name starts with K1 or T1
+    # Check if task name starts with known robot prefixes
     if task_name.startswith("K1"):
         return "K1"
     elif task_name.startswith("T1"):
         return "T1"
+    elif task_name.startswith("PI"):
+        return "PI"
     else:
         # Default fallback - could be extended for other robot types
         return "Unknown"

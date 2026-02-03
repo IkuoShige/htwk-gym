@@ -23,7 +23,7 @@ from utils.recorder import Recorder
 import importlib
 import inspect
 
-def get_task_class(task_name):
+def get_task_class(task_name, task_path=None):
     """
     Dynamically load task class by name.
     Searches through all modules in the envs package for classes that match the task name.
@@ -44,6 +44,21 @@ def get_task_class(task_name):
         snake_case = snake_case[0].upper() + snake_case[1:]  # Capitalize first letter
         possible_names.append(snake_case)
     
+    # If a task path is provided (e.g., "PI/Kicking"), prioritize that namespace.
+    if task_path and "/" in task_path:
+        task_prefix = task_path.split("/")[0]
+        try_paths = [f"envs.{task_prefix}.{task_name.lower()}"]
+        for path in try_paths:
+            try:
+                module = importlib.import_module(path)
+                for name, obj in inspect.getmembers(module):
+                    if inspect.isclass(obj) and name in possible_names:
+                        return obj
+            except ImportError:
+                pass
+            except Exception as e:
+                print(f"Error loading from {path}: {e}")
+
     # First try to get from the envs module (which imports all task classes)
     try:
         envs_module = importlib.import_module('envs')
@@ -57,6 +72,7 @@ def get_task_class(task_name):
     task_paths = [
         f"envs.T1.{task_name.lower()}",
         f"envs.K1.{task_name.lower()}",
+        f"envs.PI.{task_name.lower()}",
         f"envs.{task_name}",
     ]
     
@@ -83,13 +99,15 @@ class Runner:
         self._get_args()
         self._update_cfg_from_args()
         self._set_seed()
-        task_name = self.cfg["basic"]["task"]
+        task_path = self.cfg["basic"]["task"]
         # Extract task name from path (e.g., "T1/T1" -> "T1")
-        if "/" in task_name:
-            task_name = task_name.split("/")[-1]
+        if "/" in task_path:
+            task_name = task_path.split("/")[-1]
+        else:
+            task_name = task_path
         
         # Dynamically load the task class
-        task_class = get_task_class(task_name)
+        task_class = get_task_class(task_name, task_path)
         if task_class is None:
             raise ValueError(f"Unknown task: {task_name}. Could not find a class named '{task_name}' in the envs package.")
         
@@ -114,7 +132,7 @@ class Runner:
         parser.add_argument("--task", required=True, type=str, help="Name of the task to run.")
         parser.add_argument("--checkpoint", type=str, help="Path of the model checkpoint to load. Overrides config file if provided.")
         parser.add_argument("--num_envs", type=int, help="Number of environments to create. Overrides config file if provided.")
-        parser.add_argument("--headless", type=bool, help="Run headless without creating a viewer window. Overrides config file if provided.")
+        parser.add_argument("--headless", type=lambda x: x.lower() in ('true', '1', 'yes'), help="Run headless without creating a viewer window. Overrides config file if provided.")
         parser.add_argument("--sim_device", type=str, help="Device for physics simulation. Overrides config file if provided.")
         parser.add_argument("--rl_device", type=str, help="Device for the RL algorithm. Overrides config file if provided.")
         parser.add_argument("--seed", type=int, help="Random seed. Overrides config file if provided.")
@@ -205,6 +223,9 @@ class Runner:
                 self.buffer.update_data("time_outs", n, infos["time_outs"].to(self.device))
                 ep_info = {"reward": rew}
                 ep_info.update(infos["rew_terms"])
+                term_reasons = infos.get("term_reasons")
+                if term_reasons is not None:
+                    ep_info.update(term_reasons)
                 self.recorder.record_episode_statistics(done, ep_info, it, n == (self.cfg["runner"]["horizon_length"] - 1))
 
             with torch.no_grad():

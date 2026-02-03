@@ -1,0 +1,374 @@
+basic:
+  checkpoint: null # set to -1 to load last saved model
+  headless: true
+  max_iterations: 10000 # set the maximum number of learning iterations to train for
+  sim_device: "cuda:0" # device for physics simulation
+  rl_device: "cuda:0" # device for the RL algorithm
+  seed: -1 # seed - set to -1 to choose random seed
+  description: ""
+  enable_csv_logging: false
+
+env:
+  num_envs: 1
+  num_observations: 44
+  num_privileged_obs: 20
+  num_actions: 12
+  env_spacing: 5.  # not used with plane terrain
+
+runner:
+  horizon_length: 24
+  mini_epochs: 20
+  save_interval: 100
+  use_wandb: true
+
+viewer:
+  pos: [2., -2., 1.2]  # [m]
+  lookat: [6., 0., 0.]  # [m]
+  record_video: true  # only in play
+  record_interval: 5.  # [s]
+  record_env_idx: 0
+
+algorithm:
+  learning_rate: 1.e-5
+  gamma: 0.995
+  lam: 0.95
+  bound_coef: 1.0
+  entropy_coef: -0.01
+  symmetric_coef: 10.
+  desired_kl: 0.01
+
+sim:
+  dt: 0.001
+  substeps: 1
+  up_axis: "z"
+  gravity: [0.0, 0.0, -9.81]
+  physics_engine: "physx" # "physx" or "flex"
+  physx:
+    solver_type: 1 # 0: pgs, 1: tgs
+    num_position_iterations: 4
+    num_velocity_iterations: 1
+    contact_offset: 0.01
+    rest_offset: 0.0
+    bounce_threshold_velocity: 0.1
+    max_depenetration_velocity: 10.0
+    default_buffer_size_multiplier: 5.0
+    max_gpu_contact_pairs: 8388608 # 8*1024*1024
+    num_subscenes: 4
+    contact_collection: 1 # 0: CC_NEVER, 1: CC_LAST_SUBSTEP, 2: CC_ALL_SUBSTEPS
+
+asset:
+  file: "resources/robots/pi_12dof_release_v1/urdf/pi_12dof_release_v1_rl.urdf"
+  mujoco_file: "resources/robots/pi_12dof_release_v1/mjcf/pi_12dof_release_v1.xml"
+  name: "pi_12dof_release_v1"
+  base_name: "base_link"
+  foot_names: ["l_ankle_roll_link", "r_ankle_roll_link"]
+  disable_gravity: false
+  default_dof_drive_mode: 3 # effort control
+  collapse_fixed_joints: true
+  fix_base_link: false
+  self_collisions: 0
+  replace_cylinder_with_capsule: true
+  flip_visual_attachments: false
+  density: 0.001
+  angular_damping: 0.
+  linear_damping: 0.
+  max_angular_velocity: 1000.
+  max_linear_velocity: 1000.
+  armature: 0.
+  thickness: 0.01
+  feet_edge_pos: [[ 0.035,  0.035, -0.03],
+                  [ 0.035, -0.035, -0.03],
+                  [-0.035,  0.035, -0.03],
+                  [-0.035, -0.035, -0.03]] # x,y,z [m]
+
+ball:
+  file: "resources/T1/ball.urdf"
+  name: "ball"
+  radius: 0.075
+  init_pos: [0.3, 0.0, 0.075]
+  init_rot: [0.0, 0.0, 0.0, 1.0]
+  init_lin_vel: [0.0, 0.0, 0.0]
+  init_ang_vel: [0.0, 0.0, 0.0]
+  restitution: 0.0
+  friction: 1
+  rolling_friction: 1
+  contact_offset: 0.005
+  density: 0.001
+  thickness: 0.01
+
+init_state:
+  pos: [0.0, 0.0, 0.345]
+  rot: [0.0, 0.0, 0.0, 1.0]
+  lin_vel: [0.0, 0.0, 0.0]
+  ang_vel: [0.0, 0.0, 0.0]
+  ball_pos: [0.5, 0.0, 0.075]
+  default_joint_angles:
+    hip_pitch_joint: -0.05
+    hip_roll_joint: 0.0
+    thigh_joint: 0.0
+    calf_joint: 0.3
+    ankle_pitch_joint: -0.1
+    ankle_roll_joint: 0.0
+    default: 0.
+
+control:
+  stiffness:
+    hip_pitch_joint: 40.
+    hip_roll_joint: 15.
+    thigh_joint: 15.
+    calf_joint: 40.
+    ankle_pitch_joint: 25.
+    ankle_roll_joint: 8.
+  damping:
+    hip_pitch_joint: 0.25
+    hip_roll_joint: 0.2
+    thigh_joint: 0.2
+    calf_joint: 0.25
+    ankle_pitch_joint: 0.25
+    ankle_roll_joint: 0.2
+  action_scale: 1.0
+  decimation: 20
+
+terrain:
+  type: "plane"
+  static_friction: 1.0
+  dynamic_friction: 1.0
+  restitution: 0.
+  terrain_length: 10.
+  terrain_width: 10.
+  border_size: 5.
+  num_terrains: 8
+  terrain_proportions: [0.0, 0.0, 0.5, 0.5]
+  slope: 0.1
+  random_height: 0.1
+  discrete_height: 0.02
+  horizontal_scale: 0.1
+  vertical_scale: 0.005
+  slope_threshold: 2.0
+
+commands:
+  num_commands: 0
+  still_proportion: 0.1
+  lin_vel_x_resolution: 0.2
+  lin_vel_y_resolution: 0.1
+  ang_vel_resolution: 0.2
+  episode_length_toler: 0.1
+  lin_vel_x_toler: 0.4
+  lin_vel_y_toler: 0.2
+  ang_vel_yaw_toler: 0.2
+  curriculum: false
+  update_rate: 0.1
+  lin_vel_levels: 10
+  ang_vel_levels: 10
+
+normalization:
+  gravity: 1.0
+  lin_vel: 1.0
+  ang_vel: 1.0
+  dof_pos: 1.0
+  dof_vel: 0.1
+  filter_weight: 0.1
+  push_force: 0.1
+  push_torque: 0.5
+  clip_actions: 1.
+  ball_pos: 1.0
+
+noise:
+  gravity:
+    range: [0., 0.01]
+    operation: "additive"
+    distribution: "gaussian"
+  lin_vel:
+    range: [0., 0.05]
+    operation: "additive"
+    distribution: "gaussian"
+  ang_vel:
+    range: [0., 0.1]
+    operation: "additive"
+    distribution: "gaussian"
+  dof_pos:
+    range: [0., 0.01]
+    operation: "additive"
+    distribution: "gaussian"
+  dof_vel:
+    range: [0., 0.1]
+    operation: "additive"
+    distribution: "gaussian"
+  height:
+    range: [0., 0.02]
+    operation: "additive"
+    distribution: "gaussian"
+  ball_pos:
+    range: [-0.01, 0.01]
+    operation: "additive"
+    distribution: "gaussian"
+
+randomization:
+  init_dof_pos:
+    range: [0., 0.05]
+    operation: "additive"
+    distribution: "gaussian"
+  init_base_pos_xy:
+    range: [-1., 1.]
+    operation: "additive"
+    distribution: "uniform"
+  init_base_lin_vel_xy:
+    range: [0., 0.1]
+    operation: "additive"
+    distribution: "gaussian"
+  init_base_ang:
+    range: [-0.1, 0.1]
+    operation: "additive"
+    distribution: "gaussian"
+
+  ball_init_pos_x:
+    range: [0.12, 0.20]
+    operation: "additive"
+    distribution: "uniform"
+  ball_init_pos_y:
+    range: [-0.03, 0.03]
+    operation: "additive"
+    distribution: "uniform"
+
+  kick_interval_s: 2.
+  kick_lin_vel:
+    range: [0., 0.]
+    operation: "additive"
+    distribution: "gaussian"
+  kick_ang_vel:
+    range: [0., 0.0]
+    operation: "additive"
+    distribution: "gaussian"
+
+  push_interval_s: 5.
+  push_duration_s: 1.
+  push_force:
+    range: [0., 0.]
+    operation: "additive"
+    distribution: "gaussian"
+  push_torque:
+    range: [0., 0.]
+    operation: "additive"
+    distribution: "gaussian"
+
+  dof_stiffness:
+    range: [0.95, 1.05]
+    operation: "scaling"
+    distribution: "uniform"
+  dof_damping:
+    range: [0.95, 1.05]
+    operation: "scaling"
+    distribution: "uniform"
+  dof_friction:
+    range: [0.0, 2.0]
+    operation: "additive"
+    distribution: "uniform"
+
+  friction:
+    range: [0.1, 2.0]
+    operation: "additive"
+    distribution: "uniform"
+  compliance:
+    range: [0.5, 1.5]
+    operation: "additive"
+    distribution: "uniform"
+  restitution:
+    range: [0.1, 0.9]
+    operation: "additive"
+    distribution: "uniform"
+
+  base_com:
+    range: [-0.1, 0.1]
+    operation: "additive"
+    distribution: "uniform"
+  base_mass:
+    range: [0.8, 1.2]
+    operation: "scaling"
+    distribution: "uniform"
+  other_com:
+    range: [-0.005, 0.005]
+    operation: "additive"
+    distribution: "uniform"
+  other_mass:
+    range: [0.98, 1.02]
+    operation: "scaling"
+    distribution: "uniform"
+
+rewards:
+  scales:
+    survival: 0.25
+    tracking_lin_vel_x: 1
+    tracking_lin_vel_y: 1
+    tracking_ang_vel: 0.25
+    base_height: -80.
+    orientation: -10
+    torques: -1.5e-4
+    torque_tiredness: -1.e-2
+    power: -1.5e-3
+    lin_vel_z: -1.5
+    ang_vel_xy: -0.1
+    dof_vel: -3.5e-4
+    dof_acc: -1.2e-7
+    root_acc: -1.0e-5
+    action_rate: -0.5
+    dof_pos_limits: -1
+    feet_slip: -0.2
+    feet_yaw_diff: -3.
+    feet_yaw_mean: -3.
+    feet_roll: -0.3
+    ball_velocity_target_direction: 12
+    kicking_foot_approach_ball_stationary: 15
+    body_alignment_for_kick: 1
+    body_angle: 0.1
+    ball_acceleration: 0.5
+    ball_progress: 5.0
+    waiting: -0.2
+  ball_rolling_scale:
+    waiting: 0.0
+    survival: 0.5
+    kicking_foot_approach_ball_stationary: 0
+
+  episode_length_s: 7.
+  terminate_height: 0.18
+  terminate_vel: 60.
+  terminate_contacts_on: []
+  penalize_contacts_on: ["base_link", "hip", "thigh", "calf"]
+  only_positive_rewards: false
+  tracking_sigma: 0.25
+  base_height_target: 0.345
+  soft_dof_pos_limit: 1.
+  soft_dof_vel_limit: 1.
+  soft_torque_limit: 1.
+  swing_period: 0.2
+  feet_distance_ref_x: 0.022
+  feet_distance_ref_y: 0
+  min_ball_vel_s: 1
+  max_ball_vel_x: 3
+  ball_success_speed_threshold: 0.15
+
+  ball_target_position: [6.0, 0.0, 0.075]
+  max_ball_vel_target_reward: 10.0
+  ball_vel_target_direction_sigma: 1.0
+  ball_velocity_decay_time: 0.3
+  ball_progress_clip: 0.05
+
+  kicking_foot_index: 0
+
+  ball_stationary_speed_threshold: 0.066
+  approach_proximity_sigma: 0.1
+  max_approach_reward: 50.0
+
+  kick_target_pos_world: [5.0, 0.0, 0.075]
+  alignment_to_ball_sigma: 0.5
+  alignment_to_target_sigma: 0.5
+  max_alignment_reward: 1.0
+
+  kick_detection_speed_increase_threshold: 0.2
+  ball_rest_speed_threshold_after_kick: 0.013
+  min_steps_travel_after_kick: 10
+
+  max_ball_still_time_s: 4
+  max_ball_moving_time_s: 6
+
+  ball_acceleration_scale: 20.0
+  max_ball_acceleration_reward: 20.0
