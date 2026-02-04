@@ -1,5 +1,14 @@
 # HTWK Gym
 
+## Quick start
+
+```bash
+bash setup_third_party.sh
+source .venv/bin/activate
+python train.py --task=PI/Kicking --num_envs=64 --headless=True
+python play.py --task=PI/Kicking --checkpoint=logs/PI/PI/Kicking/2026-02-03-11-54-29/nn/model_10000.pth --headless=False
+```
+
 HTWK Gym is an advanced reinforcement learning (RL) framework for humanoid robot locomotion, developed by [HTWK Robots](https://robots.htwk-leipzig.de/startseite). Built upon the foundation of [Booster Gym](https://github.com/BoosterRobotics/booster_gym/tree/main), HTWK Gym extends the original framework with significant enhancements for multi-robot support, advanced locomotion tasks, and improved research capabilities.
 
 [![parameter_walk_on_real_T1](https://github.com/NaoHTWK/htwk-gym/blob/main/htwk_walk01.gif?raw=true)](https://github.com/NaoHTWK/htwk-gym/blob/main/htwk_walk01.gif?raw=true)
