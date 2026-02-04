@@ -1247,12 +1247,25 @@ class Kicking(BaseTask):
         # Proximity reward (existing)
         proximity_sigma = self.cfg["rewards"].get("approach_proximity_sigma", 0.1)
         proximity_value = torch.exp(-foot_ball_dist / proximity_sigma) 
-        
-        # Only give reward if the ball is stationary
-        reward = proximity_value
+        ball_speed_threshold = self.cfg["rewards"].get("ball_stationary_speed_threshold", 0.1)
+        ball_is_stationary = torch.norm(self.ball_lin_vel, dim=-1) < ball_speed_threshold
 
+        # Foot velocity towards ball (use closer foot)
+        foot_vel = (self.feet_pos - self.last_feet_pos) / self.dt
+        ball_vec = current_ball_pos_world.unsqueeze(1) - self.feet_pos
+        ball_dir = ball_vec / (torch.norm(ball_vec, dim=-1, keepdim=True) + 1e-6)
+        vel_towards = torch.sum(foot_vel * ball_dir, dim=-1)
+        closer_is_left = foot_ball_dist_left <= foot_ball_dist_right
+        vel_towards_closest = torch.where(closer_is_left, vel_towards[:, 0], vel_towards[:, 1])
+
+        vel_scale = self.cfg["rewards"].get("foot_velocity_towards_ball_scale", 1.0)
+        vel_reward = torch.clamp(vel_towards_closest * vel_scale, min=0.0)
+        vel_weight = self.cfg["rewards"].get("foot_velocity_weight", 0.3)
+
+        reward = (1.0 - vel_weight) * proximity_value + vel_weight * vel_reward
         max_reward = self.cfg["rewards"].get("max_approach_reward", 2.0)
-        return torch.clamp(reward, min=0.0, max=max_reward)
+        reward = torch.clamp(reward, min=0.0, max=max_reward)
+        return reward * ball_is_stationary.float()
 
     def _reward_body_alignment_for_kick(self):
         """Rewards aligning the robot's body towards the ball and a target."""

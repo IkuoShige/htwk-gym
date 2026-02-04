@@ -222,11 +222,11 @@ randomization:
     distribution: "gaussian"
 
   ball_init_pos_x:
-    range: [0.12, 0.20]
+    range: [0.08, 0.14]
     operation: "additive"
     distribution: "uniform"
   ball_init_pos_y:
-    range: [-0.03, 0.03]
+    range: [-0.02, 0.02]
     operation: "additive"
     distribution: "uniform"
 
@@ -297,32 +297,32 @@ randomization:
 rewards:
   scales:
     survival: 0.25
-    tracking_lin_vel_x: 1
-    tracking_lin_vel_y: 1
-    tracking_ang_vel: 0.25
-    base_height: -80.
-    orientation: -10
-    torques: -1.5e-4
+    tracking_lin_vel_x: 0
+    tracking_lin_vel_y: 0
+    tracking_ang_vel: 0
+    base_height: -40.
+    orientation: -5
+    torques: -1.0e-4
     torque_tiredness: -1.e-2
-    power: -1.5e-3
+    power: -1.0e-3
     lin_vel_z: -1.5
     ang_vel_xy: -0.1
-    dof_vel: -3.5e-4
-    dof_acc: -1.2e-7
-    root_acc: -1.0e-5
-    action_rate: -0.5
+    dof_vel: -2.0e-4
+    dof_acc: -8.0e-8
+    root_acc: -6.0e-6
+    action_rate: -0.2
     dof_pos_limits: -1
-    feet_slip: -0.2
+    feet_slip: -0.1
     feet_yaw_diff: -3.
     feet_yaw_mean: -3.
     feet_roll: -0.3
-    ball_velocity_target_direction: 12
-    kicking_foot_approach_ball_stationary: 15
+    ball_velocity_target_direction: 20
+    kicking_foot_approach_ball_stationary: 25
     body_alignment_for_kick: 1
     body_angle: 0.1
-    ball_acceleration: 0.5
-    ball_progress: 5.0
-    waiting: -0.2
+    ball_acceleration: 1.0
+    ball_progress: 10.0
+    waiting: -0.5
   ball_rolling_scale:
     waiting: 0.0
     survival: 0.5
@@ -344,12 +344,12 @@ rewards:
   feet_distance_ref_y: 0
   min_ball_vel_s: 1
   max_ball_vel_x: 3
-  ball_success_speed_threshold: 0.15
+  ball_success_speed_threshold: 0.12
 
   ball_target_position: [6.0, 0.0, 0.075]
   max_ball_vel_target_reward: 10.0
   ball_vel_target_direction_sigma: 1.0
-  ball_velocity_decay_time: 0.3
+  ball_velocity_decay_time: 0.5
   ball_progress_clip: 0.05
 
   kicking_foot_index: 0
@@ -367,8 +367,10 @@ rewards:
   ball_rest_speed_threshold_after_kick: 0.013
   min_steps_travel_after_kick: 10
 
-  max_ball_still_time_s: 4
+  max_ball_still_time_s: 5
   max_ball_moving_time_s: 6
 
-  ball_acceleration_scale: 20.0
-  max_ball_acceleration_reward: 20.0
+  ball_acceleration_scale: 15.0
+  max_ball_acceleration_reward: 15.0
+  foot_velocity_towards_ball_scale: 2.0
+  foot_velocity_weight: 0.3
